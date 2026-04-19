@@ -22,22 +22,37 @@ function extractApiKey(rawInput) {
     return "";
   }
 
+  const normalizedInput =
+    /^sudokupad\.app\//i.test(trimmed) || /^www\.sudokupad\.app\//i.test(trimmed)
+      ? `https://${trimmed}`
+      : trimmed;
+
   try {
-    const url = new URL(trimmed);
+    const url = new URL(normalizedInput);
     const queryKey = url.searchParams.get("puzzleid");
     if (queryKey) {
-      return decodeURIComponent(queryKey);
+      return decodeURIComponent(queryKey).replace(/^\/+|\/+$/g, "");
     }
 
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length > 0) {
-      return decodeURIComponent(parts[parts.length - 1]);
+    let pathKey = decodeURIComponent(url.pathname || "");
+    pathKey = pathKey.replace(/^\/+|\/+$/g, "");
+    pathKey = pathKey.replace(/^sudoku\//i, "");
+    if (pathKey) {
+      return pathKey;
     }
   } catch (_err) {
-    return trimmed;
+    return trimmed.replace(/^\/+|\/+$/g, "");
   }
 
-  return trimmed;
+  return trimmed.replace(/^\/+|\/+$/g, "");
+}
+
+function encodePuzzlePath(key) {
+  return key
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
 }
 
 function decodePayload(rawPayload) {
@@ -203,17 +218,25 @@ function drawUnderlays(svg, underlays, cellPx) {
 }
 
 function drawLines(svg, lines, cellPx) {
+  const hasExplicitFill = (fill) => {
+    if (typeof fill !== "string") {
+      return false;
+    }
+    const f = fill.trim().toLowerCase();
+    return f !== "" && f !== "none" && f !== "transparent" && f !== "#ffffff00";
+  };
+
   for (const l of lines) {
     if (!l || !Array.isArray(l.wayPoints) || l.wayPoints.length < 2) {
       continue;
     }
     const pts = l.wayPoints.map((p) => `${Number(p[1]) * cellPx},${Number(p[0]) * cellPx}`);
     const isClosed =
-      pts.length > 2 && pts[0] === pts[pts.length - 1] && (l.fill || l.color || "#000");
-    if (isClosed) {
+      pts.length > 2 && pts[0] === pts[pts.length - 1] && hasExplicitFill(l.fill);
+    if (isClosed && hasExplicitFill(l.fill)) {
       const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
       poly.setAttribute("points", pts.join(" "));
-      poly.setAttribute("fill", l.fill || l.color || "#000");
+      poly.setAttribute("fill", l.fill);
       poly.setAttribute("stroke", l.color || "#000");
       poly.setAttribute("stroke-width", String((Number(l.thickness) || 1) * 0.2));
       svg.appendChild(poly);
@@ -227,6 +250,32 @@ function drawLines(svg, lines, cellPx) {
     polyline.setAttribute("stroke-linecap", l["stroke-linecap"] || "round");
     polyline.setAttribute("stroke-linejoin", l["stroke-linejoin"] || "round");
     svg.appendChild(polyline);
+  }
+}
+
+function drawOverlays(svg, overlays, cellPx) {
+  for (const overlay of overlays || []) {
+    if (!overlay || !Array.isArray(overlay.center)) {
+      continue;
+    }
+    const text = overlay.text;
+    if (typeof text !== "string" || text.length === 0) {
+      continue;
+    }
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const x = Number(overlay.center[1]) * cellPx;
+    const y = Number(overlay.center[0]) * cellPx;
+    t.textContent = text;
+    t.setAttribute("x", String(x));
+    t.setAttribute("y", String(y));
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("dominant-baseline", "middle");
+    t.setAttribute("font-size", String(overlay.fontSize || 18));
+    t.setAttribute("fill", overlay.color || "#111");
+    if (overlay.angle) {
+      t.setAttribute("transform", `rotate(${Number(overlay.angle)}, ${x}, ${y})`);
+    }
+    svg.appendChild(t);
   }
 }
 
@@ -270,6 +319,7 @@ function renderPuzzle(normalized) {
   drawGrid(svg, rows, cols, cellPx);
   drawUnderlays(svg, normalized.features.underlays, cellPx);
   drawLines(svg, normalized.features.lines, cellPx);
+  drawOverlays(svg, normalized.features.overlays, cellPx);
   drawNumbers(svg, normalized.grid.cells, cellPx);
 
   boardWrap.appendChild(svg);
@@ -288,8 +338,8 @@ async function loadPuzzle(inputValue) {
     throw new Error("Please enter a SudokuPad URL or API key.");
   }
   const candidateUrls = [
-    `${API_BASE}${encodeURIComponent(apiKey)}`,
-    `${LEGACY_BASE}${encodeURIComponent(apiKey)}`,
+    `${API_BASE}${encodePuzzlePath(apiKey)}`,
+    `${LEGACY_BASE}${encodePuzzlePath(apiKey)}`,
   ];
 
   let rawPayload = "";
