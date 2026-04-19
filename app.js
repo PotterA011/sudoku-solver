@@ -85,6 +85,10 @@ function parseCageMetadata(cages) {
 }
 
 function normalizePuzzle(apiKey, rawPayload, decoded, fetchedUrl) {
+  const rawMetadata =
+    decoded && typeof decoded.metadata === "object" && decoded.metadata !== null
+      ? decoded.metadata
+      : {};
   const cages = Array.isArray(decoded.cages) ? decoded.cages : [];
   const lines = Array.isArray(decoded.lines) ? decoded.lines : [];
   const underlays = Array.isArray(decoded.underlays) ? decoded.underlays : [];
@@ -94,9 +98,10 @@ function normalizePuzzle(apiKey, rawPayload, decoded, fetchedUrl) {
 
   const metaFromCages = parseCageMetadata(cages);
   const metadata = {
-    title: metaFromCages.title || decoded.title || null,
-    author: metaFromCages.author || decoded.author || null,
-    rules: metaFromCages.rules || decoded.rules || null,
+    source: rawMetadata.source || null,
+    title: metaFromCages.title || rawMetadata.title || decoded.title || null,
+    author: metaFromCages.author || rawMetadata.author || decoded.author || null,
+    rules: metaFromCages.rules || rawMetadata.rules || decoded.rules || null,
     solution: metaFromCages.solution || null,
   };
 
@@ -194,6 +199,66 @@ function drawGrid(svg, rows, cols, cellPx) {
     line.setAttribute("stroke", "black");
     line.setAttribute("stroke-width", c === 0 || c === cols ? "2.5" : "1");
     svg.appendChild(line);
+  }
+}
+
+function drawRegionBoundaries(svg, regions, rows, cols, cellPx) {
+  if (!Array.isArray(regions) || regions.length === 0) {
+    return;
+  }
+
+  const regionMap = new Map();
+  for (let rid = 0; rid < regions.length; rid += 1) {
+    const region = regions[rid];
+    if (!Array.isArray(region)) {
+      continue;
+    }
+    for (const cell of region) {
+      if (!Array.isArray(cell) || cell.length < 2) {
+        continue;
+      }
+      const r = Number(cell[0]);
+      const c = Number(cell[1]);
+      if (Number.isFinite(r) && Number.isFinite(c)) {
+        regionMap.set(`${r},${c}`, rid);
+      }
+    }
+  }
+
+  const sameRegion = (r1, c1, r2, c2) =>
+    regionMap.get(`${r1},${c1}`) !== undefined &&
+    regionMap.get(`${r1},${c1}`) === regionMap.get(`${r2},${c2}`);
+
+  const drawEdge = (x1, y1, x2, y2) => {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(x1));
+    line.setAttribute("y1", String(y1));
+    line.setAttribute("x2", String(x2));
+    line.setAttribute("y2", String(y2));
+    line.setAttribute("stroke", "#000");
+    line.setAttribute("stroke-width", "2.5");
+    svg.appendChild(line);
+  };
+
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      // top edge
+      if (r === 0 || !sameRegion(r, c, r - 1, c)) {
+        drawEdge(c * cellPx, r * cellPx, (c + 1) * cellPx, r * cellPx);
+      }
+      // left edge
+      if (c === 0 || !sameRegion(r, c, r, c - 1)) {
+        drawEdge(c * cellPx, r * cellPx, c * cellPx, (r + 1) * cellPx);
+      }
+      // bottom edge
+      if (r === rows - 1 || !sameRegion(r, c, r + 1, c)) {
+        drawEdge(c * cellPx, (r + 1) * cellPx, (c + 1) * cellPx, (r + 1) * cellPx);
+      }
+      // right edge
+      if (c === cols - 1 || !sameRegion(r, c, r, c + 1)) {
+        drawEdge((c + 1) * cellPx, r * cellPx, (c + 1) * cellPx, (r + 1) * cellPx);
+      }
+    }
   }
 }
 
@@ -317,6 +382,7 @@ function renderPuzzle(normalized) {
   svg.setAttribute("height", String(height));
 
   drawGrid(svg, rows, cols, cellPx);
+  drawRegionBoundaries(svg, normalized.features.regions, rows, cols, cellPx);
   drawUnderlays(svg, normalized.features.underlays, cellPx);
   drawLines(svg, normalized.features.lines, cellPx);
   drawOverlays(svg, normalized.features.overlays, cellPx);
