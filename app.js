@@ -1,4 +1,5 @@
 const API_BASE = "https://sudokupad.app/api/puzzle/";
+const LEGACY_BASE = "https://sudokupad.svencodes.com/ctclegacy/";
 
 const form = document.getElementById("load-form");
 const input = document.getElementById("puzzle-input");
@@ -68,7 +69,7 @@ function parseCageMetadata(cages) {
   return metadata;
 }
 
-function normalizePuzzle(apiKey, rawPayload, decoded) {
+function normalizePuzzle(apiKey, rawPayload, decoded, fetchedUrl) {
   const cages = Array.isArray(decoded.cages) ? decoded.cages : [];
   const lines = Array.isArray(decoded.lines) ? decoded.lines : [];
   const underlays = Array.isArray(decoded.underlays) ? decoded.underlays : [];
@@ -111,7 +112,7 @@ function normalizePuzzle(apiKey, rawPayload, decoded) {
   return {
     api_key: apiKey,
     source: {
-      fetched_url: `${API_BASE}${encodeURIComponent(apiKey)}`,
+      fetched_url: fetchedUrl,
       raw_prefix: rawPayload.slice(0, 3),
       raw_length: rawPayload.length,
     },
@@ -286,16 +287,43 @@ async function loadPuzzle(inputValue) {
   if (!apiKey) {
     throw new Error("Please enter a SudokuPad URL or API key.");
   }
-  const res = await fetch(`${API_BASE}${encodeURIComponent(apiKey)}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch puzzle (${res.status})`);
+  const candidateUrls = [
+    `${API_BASE}${encodeURIComponent(apiKey)}`,
+    `${LEGACY_BASE}${encodeURIComponent(apiKey)}`,
+  ];
+
+  let rawPayload = "";
+  let fetchedUrl = "";
+  let lastErr = "";
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        lastErr = `Failed to fetch puzzle (${res.status}) from ${url}`;
+        continue;
+      }
+      rawPayload = (await res.text()).trim();
+      fetchedUrl = url;
+      if (rawPayload) {
+        break;
+      }
+      lastErr = `Empty response from ${url}`;
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+    }
   }
-  const rawPayload = (await res.text()).trim();
+
+  if (!rawPayload) {
+    throw new Error(
+      `Failed to fetch puzzle. Last error: ${lastErr || "unknown error"}`
+    );
+  }
+
   const decoded = decodePayload(rawPayload);
   if (!decoded || typeof decoded !== "object") {
     throw new Error("Decoded puzzle is not an object.");
   }
-  return normalizePuzzle(apiKey, rawPayload, decoded);
+  return normalizePuzzle(apiKey, rawPayload, decoded, fetchedUrl);
 }
 
 form.addEventListener("submit", async (event) => {
