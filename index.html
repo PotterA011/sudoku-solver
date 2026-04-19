@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SudokuPad Puzzle Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./puzpatcher.bundle.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <h1>SudokuPad Puzzle Viewer</h1>
+      <p class="subtle">
+        Paste a SudokuPad URL or API key. The viewer extracts the key, decodes
+        puzzle data, and renders the grid.
+      </p>
+      <div class="notice panel">
+        <strong>Attribution & Disclaimer</strong>
+        <p>
+          Puzzle data is credited to
+          <a href="https://crackingthecryptic.com/" target="_blank" rel="noreferrer">
+            Cracking The Cryptic
+          </a>
+          and associated puzzle creators on SudokuPad.
+        </p>
+        <p>
+          Utility/decoder files used by this viewer (including SudokuPad helper
+          logic such as bundled patch/loader tooling) are credited to their
+          original SudokuPad authors and maintainers.
+        </p>
+        <p>This viewer is provided for personal use only.</p>
+      </div>
+
+      <form id="load-form" class="panel">
+        <label for="puzzle-input">SudokuPad URL or API key</label>
+        <div class="row">
+          <input
+            id="puzzle-input"
+            type="text"
+            placeholder="https://sudokupad.app/ypf71xbp99 or ypf71xbp99"
+            autocomplete="off"
+          />
+          <button type="submit">Load Puzzle</button>
+        </div>
+        <p id="status" class="status">Ready.</p>
+      </form>
+
+      <section class="panel">
+        <h2>Metadata</h2>
+        <div id="meta" class="meta-grid">
+          <div><strong>API key:</strong> <span id="meta-key">-</span></div>
+          <div><strong>Title:</strong> <span id="meta-title">-</span></div>
+          <div><strong>Author:</strong> <span id="meta-author">-</span></div>
+          <div><strong>Rules:</strong> <span id="meta-rules">-</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Puzzle Render</h2>
+        <div id="board-wrap" class="board-wrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Normalized JSON</h2>
+        <textarea id="json-output" readonly></textarea>
+      </section>
+    </main>
+  </body>
+</html>
